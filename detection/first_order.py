@@ -3,7 +3,7 @@ import cv2
 
 
 class FirstOrder:
-    def __init__(self, image_path=None, threshold=100):
+    def __init__(self, image_path=None, threshold=0):
         self.image_path = image_path
         self.image_matrix = self._load_image()
         self.threshold = threshold
@@ -12,7 +12,7 @@ class FirstOrder:
         img = cv2.imread(self.image_path, cv2.IMREAD_GRAYSCALE)
         if img is None:
             raise FileNotFoundError(f"Could not load image at path: {self.image_path}")
-        return cv2.GaussianBlur(img, (5, 5), 0)
+        return cv2.GaussianBlur(img, (3 , 3), 0)
     
     def _apply_threshold(self, gradient_magnitude) -> np.ndarray:
         if self.threshold is None:
@@ -59,4 +59,6 @@ class FirstOrder:
         G_normalized = cv2.normalize(G, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
 
         return self._apply_threshold(G_normalized)
+    
+    
 

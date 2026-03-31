@@ -3,14 +3,16 @@ import cv2
 import matplotlib.pyplot as plt
 
 class Canny:
-    def __init__(self, image_path, sigma=1.4, high_threshold=100, low_threshold=50):
+    def __init__(self, image_path, sigma=0, median=0):
         self.image_path = image_path
         self.sigma = sigma
-        self.high_threshold = high_threshold
-        self.low_threshold = low_threshold
 
         self.img = cv2.imread(self.image_path, cv2.IMREAD_GRAYSCALE)
         if self.img is None: raise FileNotFoundError("Image not found")
+
+        self.median = median if median != 0 else np.median(self.img)
+        self.high_threshold = int(max(0, (1 + self.sigma) * self.median))
+        self.low_threshold = int(max(0, (1 - self.sigma) * self.median))
 
     def gaussian_kernel(self, size) -> np.ndarray:
 
@@ -49,15 +51,15 @@ class Canny:
                     Z[i,j] = 0
         return Z
 
-    def hysteresis_threshold(self) -> np.ndarray:
+    def hysteresis_threshold(self, thin_edges) -> np.ndarray:
         M, N = self.img.shape
         res = np.zeros((M, N), dtype=np.uint8)
         
         strong = 255
         weak = 50 #
         
-        strong_i, strong_j = np.where(self.img >= self.high_threshold)
-        weak_i, weak_j = np.where((self.img <= self.high_threshold) & (self.img >= self.low_threshold))
+        strong_i, strong_j = np.where(thin_edges >= self.high_threshold)
+        weak_i, weak_j = np.where((thin_edges <= self.high_threshold) & (thin_edges >= self.low_threshold))
         
         res[strong_i, strong_j] = strong
         res[weak_i, weak_j] = weak

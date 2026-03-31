@@ -13,35 +13,16 @@ class SubPixel:
             raise FileNotFoundError(f"Could not load image at path: {self.image_path}")
         return cv2.GaussianBlur(img, (5, 5), 0)
 
-    # def polynomial_fit(self) -> np.ndarray:
-        h, w = self.image_matrix.shape
-        x_star = np.zeros((h, w), dtype=np.float64)
-
-        for i in range(1, h-1):
-            for j in range(1, w-1):
-                g0 = self.image_matrix[i, j]
-                g_minus = self.image_matrix[i, j-1]
-                g_plus = self.image_matrix[i, j+1]
-
-                denominator = 2.0 * (g_minus - 2.0 * g0 + g_plus)
-
-                if abs(denominator) < 1e-10:
-                    offset = 0.0
-                else:
-                    offset = (g_minus - g_plus) / denominator
-
-                x_star[i, j] = j + offset
-
-        return x_star
+    def _get_adaptive_threshold(self, magnitude, sensitivity=0.15):
+        upper_limit = np.percentile(magnitude, 99)
+        return upper_limit * sensitivity
 
     def polynomial_fit(self) -> np.ndarray:
-        # 1. First, calculate gradient magnitude to find real edges
         Lx = cv2.Sobel(self.image_matrix, cv2.CV_64F, 1, 0, ksize=3)
         Ly = cv2.Sobel(self.image_matrix, cv2.CV_64F, 0, 1, ksize=3)
         mag = np.sqrt(Lx**2 + Ly**2)
         
-        # 2. Set a threshold to ignore MRI background noise
-        threshold = np.max(mag) * 0.1 
+        threshold = self._get_adaptive_threshold(mag)
         
         h, w = self.image_matrix.shape
         refined_edges = np.zeros((h, w), dtype=np.float64)
@@ -62,6 +43,7 @@ class SubPixel:
     def lindeberg_differential(self) -> np.ndarray:
         Lx = cv2.Sobel(self.image_matrix, cv2.CV_64F, 1, 0, ksize=3)
         Ly = cv2.Sobel(self.image_matrix, cv2.CV_64F, 0, 1, ksize=3)
+        mag = np.sqrt(Lx**2 + Ly**2)
         
         # 2. Second-order partial derivatives (L_xx, L_yy, L_xy)
         Lxx = cv2.Sobel(self.image_matrix, cv2.CV_64F, 2, 0, ksize=3)
@@ -74,7 +56,17 @@ class SubPixel:
         # Normalization: This makes faint edges as visible as strong ones
         L_vv = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=denominator!=0)
         
-        return L_vv
+        thresh = self._get_adaptive_threshold(mag)
+        h, w = self.image_matrix.shape
+        binary_edges = np.zeros((h, w), dtype=np.uint8)
+
+        for i in range(1, h-1):
+            for j in range(1, w-1):
+                if mag[i, j] > thresh:
+                    # Look for sign change in L_vv across neighbors
+                    if (L_vv[i, j-1] * L_vv[i, j+1] < 0) or (L_vv[i-1, j] * L_vv[i+1, j] < 0):
+                        binary_edges[i, j] = 255
+        return binary_edges
 
 
 
