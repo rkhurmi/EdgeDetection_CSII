@@ -9,6 +9,7 @@ from detection.first_order import FirstOrder
 from detection.second_order import SecondOrder
 from detection.deriche import Deriche
 from detection.sub_pixel import SubPixel
+from detection.wavelet import DWT
 from error import EdgeEvaluation
 
 def label_txt_to_outline_mask(txt_path, image_shape) -> np.ndarray:
@@ -25,7 +26,6 @@ def label_txt_to_outline_mask(txt_path, image_shape) -> np.ndarray:
     mask = np.zeros((h, w), dtype=np.uint8)
     cv2.polylines(mask, [polygon_px], isClosed=True, color=255, thickness=2)
     
-    # Return both the mask AND the pixel coordinates for cropping
     return mask, polygon_px
 
 def get_images_and_labels(image_path, label_path, image_count) -> list[tuple[str, str]]:
@@ -54,7 +54,7 @@ def plot_error_across_thresholds(image_folder: str, label_folder: str) -> None:
     if not image_label_pairs:
         raise RuntimeError("No matching image/label pairs found.")
 
-    threshold_values = [0.1, 0.5, 1.0, 1.25, 2.0]
+    threshold_values = [0.5, 1, 1.5, 2.0, 2.5]
     f1_means = []
     precision_means = []
     recall_means = []
@@ -68,7 +68,7 @@ def plot_error_across_thresholds(image_folder: str, label_folder: str) -> None:
             image_shape = cv2.imread(img_path).shape
             gt_mask, polygon_px = label_txt_to_outline_mask(lbl_path, image_shape)
 
-            detected = Deriche(img_path, alpha=threshold_ratio).apply_deriche()
+            detected = DWT(img_path, k=threshold_ratio).get_adaptive_edges()
 
             evaluator = EdgeEvaluation(detected, gt_mask, polygon_px=polygon_px)
             threshold_precision_scores.append(evaluator.calculate_precision())
@@ -83,14 +83,13 @@ def plot_error_across_thresholds(image_folder: str, label_folder: str) -> None:
     plt.plot(threshold_values, precision_means, marker='o', linewidth=2, label='Precision')
     plt.plot(threshold_values, recall_means, marker='o', linewidth=2, label='Recall')
     plt.plot(threshold_values, f1_means, marker='o', linewidth=2, label='F1 Score')
-    plt.title("Deriche Against Different Alpha Values")
-    plt.xlabel("Alpha Value")
+    plt.title("Haar Wavelet Edge Detection Sensitivity Analysis")
+    plt.xlabel("Sensitivity Coefficient (k)")
     plt.ylabel("Score")
     plt.ylim(0.0, 1.1)
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.legend()
     plt.show()
-
 
 def plot_images_with_gt(image_folder: str, label_folder: str, threshold: float) -> None:
     image_label_pairs = get_images_and_labels(image_folder, label_folder, 3)

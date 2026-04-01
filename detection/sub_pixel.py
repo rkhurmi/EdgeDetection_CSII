@@ -2,10 +2,11 @@ import numpy as np
 import cv2
 
 class SubPixel:
-    def __init__(self, image_path):
+    def __init__(self, image_path, sensitivity=0):
         self.image_path = image_path
 
         self.image_matrix = self._load_image()
+        self.sensitivity = sensitivity
 
     def _load_image(self) -> np.ndarray:
         img = cv2.imread(self.image_path, cv2.IMREAD_GRAYSCALE)
@@ -13,9 +14,9 @@ class SubPixel:
             raise FileNotFoundError(f"Could not load image at path: {self.image_path}")
         return cv2.GaussianBlur(img, (5, 5), 0)
 
-    def _get_adaptive_threshold(self, magnitude, sensitivity=0.15):
+    def _get_adaptive_threshold(self, magnitude):
         upper_limit = np.percentile(magnitude, 99)
-        return upper_limit * sensitivity
+        return upper_limit * self.sensitivity
 
     def polynomial_fit(self) -> np.ndarray:
         Lx = cv2.Sobel(self.image_matrix, cv2.CV_64F, 1, 0, ksize=3)
