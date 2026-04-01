@@ -21,7 +21,7 @@ class SecondOrder:
 
         return laplacian
 
-    def find_zero_crossings(self, threshold=0.1):
+    def find_zero_crossings(self, threshold=5):
         """
         Manually detects where the second derivative changes sign.
         """

@@ -49,12 +49,11 @@ def get_images_and_labels(image_path, label_path, image_count) -> list[tuple[str
 
     return [(images_by_stem[stem], labels_by_stem[stem]) for stem in matched_stems]
 
-def plot_error_across_thresholds(image_folder: str, label_folder: str) -> None:
+def plot_error_across_thresholds(image_folder: str, label_folder: str, threshold_values: list[float], detector_fn: callable) -> None:
     image_label_pairs = get_images_and_labels(image_folder, label_folder, 10)
     if not image_label_pairs:
         raise RuntimeError("No matching image/label pairs found.")
-
-    threshold_values = [0.5, 1, 1.5, 2.0, 2.5]
+    
     f1_means = []
     precision_means = []
     recall_means = []
@@ -68,7 +67,7 @@ def plot_error_across_thresholds(image_folder: str, label_folder: str) -> None:
             image_shape = cv2.imread(img_path).shape
             gt_mask, polygon_px = label_txt_to_outline_mask(lbl_path, image_shape)
 
-            detected = DWT(img_path, k=threshold_ratio).get_adaptive_edges()
+            detected = detector_fn(img_path, threshold_ratio)
 
             evaluator = EdgeEvaluation(detected, gt_mask, polygon_px=polygon_px)
             threshold_precision_scores.append(evaluator.calculate_precision())
@@ -83,34 +82,35 @@ def plot_error_across_thresholds(image_folder: str, label_folder: str) -> None:
     plt.plot(threshold_values, precision_means, marker='o', linewidth=2, label='Precision')
     plt.plot(threshold_values, recall_means, marker='o', linewidth=2, label='Recall')
     plt.plot(threshold_values, f1_means, marker='o', linewidth=2, label='F1 Score')
-    plt.title("Haar Wavelet Edge Detection Sensitivity Analysis")
-    plt.xlabel("Sensitivity Coefficient (k)")
+    plt.title("Second-Order Detection Against Different Threshold Values")
+    plt.xlabel("Sigma Value")
     plt.ylabel("Score")
     plt.ylim(0.0, 1.1)
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.legend()
     plt.show()
 
-def plot_images_with_gt(image_folder: str, label_folder: str, threshold: float) -> None:
+def plot_images_with_gt(image_folder: str, label_folder: str, threshold: float, detector_fn: callable) -> None:
     image_label_pairs = get_images_and_labels(image_folder, label_folder, 3)
     if len(image_label_pairs) < 3:
         raise RuntimeError("Need at least 3 matching image/label pairs.")
 
-    fig, axes = plt.subplots(3, 2, figsize=(10, 12))
-    fig.suptitle(f"Ground Truth vs Robert (ideal threshold={threshold})", fontsize=14)
+    fig, axes = plt.subplots(2, 3, figsize=(12, 8))
+    fig.suptitle(f"Detected Edges vs Ground Truth (Threshold={threshold})", fontsize=14)
 
-    for row, (img_path, lbl_path) in enumerate(image_label_pairs[:3]):
+    for col, (img_path, lbl_path) in enumerate(image_label_pairs[:3]):
         image_shape = cv2.imread(img_path).shape
         gt_mask, _ = label_txt_to_outline_mask(lbl_path, image_shape)
-        detected = FirstOrder(img_path, threshold=threshold).robert_cross_operator()
 
-        axes[row, 0].imshow(gt_mask, cmap='gray')
-        axes[row, 0].set_title(f"GT: {Path(img_path).name}")
-        axes[row, 0].axis('off')
+        detected = detector_fn(img_path, threshold)
 
-        axes[row, 1].imshow(detected, cmap='gray')
-        axes[row, 1].set_title(f"Detected (t={threshold})")
-        axes[row, 1].axis('off')
+        axes[0, col].imshow(detected, cmap='gray')
+        axes[0, col].set_title(f"Detected: Image {col+1}")
+        axes[0, col].axis('off')
+
+        axes[1, col].imshow(gt_mask, cmap='gray')
+        axes[1, col].set_title(f"Ground Truth: Image {col+1}")
+        axes[1, col].axis('off')
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.97])
     plt.show()
@@ -121,5 +121,41 @@ if __name__ == "__main__":
     image_path = "original_images\\images"
     label_path = "original_images\\labels"
 
-    plot_error_across_thresholds(image_path, label_path)
-    # plot_images_with_gt(image_path, label_path, threshold=0.2)
+    def roberts_detector(img_path: str, threshold: float):
+        return FirstOrder(img_path, threshold=threshold).robert_cross_operator()
+    def sobel_detector(img_path: str, threshold: float):
+        return FirstOrder(img_path, threshold=threshold).sobel_operator()
+    def scharr_detector(img_path: str, threshold: float):
+        return FirstOrder(img_path, threshold=threshold).scharr_operator()
+    
+    def canny_detector(img_path: str, threshold: float):
+        return Canny(img_path, sigma=threshold).apply_canny()
+    
+    def deriche_detector(img_path: str, threshold: float):
+        return Deriche(img_path, alpha=threshold).apply_deriche()
+
+    def second_order_detector(img_path: str, threshold: float):
+        return SecondOrder(img_path, sigma=threshold).find_zero_crossings()
+    
+    def wavelet_detector(img_path: str, threshold: float):
+        return DWT(img_path, k=threshold).get_adaptive_edges()
+
+    def sub_pixel_detector(img_path: str, threshold: float):
+        return SubPixel(img_path, sensitivity=threshold).polynomial_fit()
+    def sub_pixel_lindeberg_detector(img_path: str, threshold: float):
+        return SubPixel(img_path, sensitivity=threshold).lindeberg_differential()
+    
+
+    # plot_error_across_thresholds(
+    #     image_path,
+    #     label_path,
+    #     threshold_values=[0.5, 0.7, 0.9, 1.0, 1.2, 1.5],
+    #     detector_fn=second_order_detector,
+    # )
+
+    plot_images_with_gt(
+        image_path, 
+        label_path, 
+        threshold=0.7, 
+        detector_fn=second_order_detector,
+    )
