@@ -64,24 +64,24 @@ def evaluate_edges(edge_map: np.ndarray, gt_mask: np.ndarray, polygon_px: np.nda
 def run_all_detectors(image_path: str) -> dict[str, np.ndarray]:
     results: dict[str, np.ndarray] = {}
 
-    fo = FirstOrder(image_path, threshold=50)
+    fo = FirstOrder(image_path, threshold=40)
     results["Roberts Cross"] = fo.robert_cross_operator()
     results["Sobel"] = fo.sobel_operator()
     results["Scharr"] = fo.scharr_operator()
 
-    so = SecondOrder(image_path, sigma=1.4)
+    so = SecondOrder(image_path, sigma=0.7)
     results["LoG Zero-Crossings"] = so.find_zero_crossings(threshold=0.1)
 
-    results["Canny"] = Canny(image_path, sigma=0.7).apply_canny()
-    results["Deriche"] = Deriche(image_path, alpha=1.0).apply_deriche()
-    results["DWT"] = DWT(image_path, k=2.0).get_adaptive_edges()
+    results["Canny"] = Canny(image_path, sigma=0.1).apply_canny()
+    results["Deriche"] = Deriche(image_path, alpha=0.6).apply_deriche()
+    results["DWT"] = DWT(image_path, k=2.5).get_adaptive_edges()
 
-    sp_poly = SubPixel(image_path, sensitivity=0.15).polynomial_fit()
+    sp_poly = SubPixel(image_path, sensitivity=0.5).polynomial_fit()
     if sp_poly.dtype != np.uint8:
         sp_poly = cv2.normalize(sp_poly, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
     results["SubPixel Polynomial"] = sp_poly
 
-    results["SubPixel Lindeberg"] = SubPixel(image_path, sensitivity=0.15).lindeberg_differential()
+    results["SubPixel Lindeberg"] = SubPixel(image_path, sensitivity=0.5).lindeberg_differential()
     return results
 
 
