@@ -1,15 +1,6 @@
-"""
-Batch evaluation + visualization for edge detectors.
-
-What this script does:
-1. Runs detectors on every image that has a matching label.
-2. Evaluates Precision / Recall / F1 against GT outlines.
-3. Saves comparison charts in the output folder.
-
-Notes:
-- Prewitt is intentionally excluded.
-- DWT is included.
-"""
+# Rosie Khurmi & Devarsh Joshi
+# April 9, 2026
+# Edge Detection in Computational Science II
 
 import argparse
 import os
@@ -37,10 +28,12 @@ OUTPUT_DIR = BASE_DIR / "output"
 
 
 def label_txt_to_outline_mask(txt_path: Path, image_shape: tuple[int, ...]) -> tuple[np.ndarray, np.ndarray]:
+    ''' Reads a label .txt file and converts it to a binary mask with the polygon outline drawn.'''
     data = txt_path.read_text().strip().split()
     values = np.array(data, dtype=np.float64)
     polygon_xy = values[1:].reshape(-1, 2)
 
+    # Convert polygon coordinates to pixel indices
     h, w = image_shape[:2]
     polygon_px = np.stack(
         [polygon_xy[:, 0] * w, polygon_xy[:, 1] * h],
@@ -53,6 +46,7 @@ def label_txt_to_outline_mask(txt_path: Path, image_shape: tuple[int, ...]) -> t
 
 
 def evaluate_edges(edge_map: np.ndarray, gt_mask: np.ndarray, polygon_px: np.ndarray, tolerance: int) -> dict[str, float]:
+    ''' Evaluates detected edges against ground truth using Precision, Recall, and F1 Score. '''
     evaluator = EdgeEvaluation(edge_map, gt_mask, polygon_px=polygon_px, radius=tolerance)
     return {
         "precision": evaluator.calculate_precision(),
@@ -62,20 +56,25 @@ def evaluate_edges(edge_map: np.ndarray, gt_mask: np.ndarray, polygon_px: np.nda
 
 
 def run_all_detectors(image_path: str) -> dict[str, np.ndarray]:
+    ''' Runs all edge detection methods on the given image and returns their outputs. '''
     results: dict[str, np.ndarray] = {}
 
+    # First-order methods
     fo = FirstOrder(image_path, threshold=40)
     results["Roberts Cross"] = fo.robert_cross_operator()
     results["Sobel"] = fo.sobel_operator()
     results["Scharr"] = fo.scharr_operator()
 
+    # Second-order methods
     so = SecondOrder(image_path, sigma=0.7)
     results["LoG Zero-Crossings"] = so.find_zero_crossings(threshold=0.1)
 
+    # Other methods
     results["Canny"] = Canny(image_path, sigma=0.1).apply_canny()
     results["Deriche"] = Deriche(image_path, alpha=0.6).apply_deriche()
     results["DWT"] = DWT(image_path, k=2.5).get_adaptive_edges()
 
+    # Sub-pixel methods
     sp_poly = SubPixel(image_path, sensitivity=0.5).polynomial_fit()
     if sp_poly.dtype != np.uint8:
         sp_poly = cv2.normalize(sp_poly, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
@@ -86,14 +85,18 @@ def run_all_detectors(image_path: str) -> dict[str, np.ndarray]:
 
 
 def collect_metrics(limit: int | None = None, tolerance: int = 2) -> dict[str, list[dict[str, float]]]:
+    ''' Collects evaluation metrics for all detectors across the dataset. '''
     images = sorted([p.name for p in IMG_DIR.iterdir() if p.suffix.lower() in {".jpg", ".png", ".jpeg"}])
     if limit:
         images = images[:limit]
 
+    # Dictionary to hold metrics for each detector across all images
     all_metrics: dict[str, list[dict[str, float]]] = {}
 
+    # Iterate over images
     total = len(images)
     for idx, img_name in enumerate(images, start=1):
+        # Get the corresponding label file path
         stem = Path(img_name).stem
         img_path = IMG_DIR / img_name
         label_path = LABEL_DIR / f"{stem}.txt"
@@ -109,21 +112,29 @@ def collect_metrics(limit: int | None = None, tolerance: int = 2) -> dict[str, l
             continue
 
         try:
+            # Load the ground truth mask and polygon coordinates
             gt_mask, polygon_px = label_txt_to_outline_mask(label_path, img.shape)
             detector_outputs = run_all_detectors(str(img_path))
         except Exception as exc:
             print(f"  skipped: {exc}")
             continue
 
+        # Evaluate each detector's output against the ground truth and store metrics
         for detector_name, edge_map in detector_outputs.items():
             metrics = evaluate_edges(edge_map, gt_mask, polygon_px, tolerance=tolerance)
             all_metrics.setdefault(detector_name, []).append(metrics)
 
     return all_metrics
 
+''' The following functions are for visualizing the collected metrics across detectors. 
+They generate bar charts, box plots, radar charts, and heatmaps to 
+compare the performance of different edge detection methods. '''
 
 def average_metrics(all_metrics: dict[str, list[dict[str, float]]]) -> dict[str, dict[str, float]]:
+    ''' Averages the collected metrics for each detector across all images. '''
     avg: dict[str, dict[str, float]] = {}
+
+    # Compute average precision, recall, and F1 score for each detector
     for name, records in all_metrics.items():
         if not records:
             avg[name] = {"precision": 0.0, "recall": 0.0, "f1": 0.0}
@@ -137,6 +148,7 @@ def average_metrics(all_metrics: dict[str, list[dict[str, float]]]) -> dict[str,
 
 
 def plot_avg_bars(avg: dict[str, dict[str, float]], save_path: Path) -> None:
+    ''' Plots a grouped bar chart comparing average Precision, Recall, and F1 Score for each detector. '''
     names = list(avg.keys())
     precision = [avg[n]["precision"] for n in names]
     recall = [avg[n]["recall"] for n in names]
@@ -162,6 +174,7 @@ def plot_avg_bars(avg: dict[str, dict[str, float]], save_path: Path) -> None:
 
 
 def plot_f1_boxplot(all_metrics: dict[str, list[dict[str, float]]], save_path: Path) -> None:
+    ''' Plots a box plot showing the distribution of F1 Scores for each detector across all images. '''
     names = list(all_metrics.keys())
     data = [[r["f1"] for r in all_metrics[n]] for n in names]
 
@@ -182,6 +195,7 @@ def plot_f1_boxplot(all_metrics: dict[str, list[dict[str, float]]], save_path: P
 
 
 def plot_radar(avg: dict[str, dict[str, float]], save_path: Path) -> None:
+    ''' Plots a radar chart comparing Precision, Recall, and F1 Score for each detector. '''
     categories = ["Precision", "Recall", "F1"]
     angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
     angles += angles[:1]
@@ -203,6 +217,7 @@ def plot_radar(avg: dict[str, dict[str, float]], save_path: Path) -> None:
 
 
 def plot_heatmap(avg: dict[str, dict[str, float]], save_path: Path) -> None:
+    ''' Plots a heatmap showing the average Precision, Recall, and F1 Score for each detector. '''
     names = list(avg.keys())
     labels = ["Precision", "Recall", "F1"]
     data = np.array([[avg[n]["precision"], avg[n]["recall"], avg[n]["f1"]] for n in names])
@@ -229,6 +244,7 @@ def plot_heatmap(avg: dict[str, dict[str, float]], save_path: Path) -> None:
 
 
 def print_summary(avg: dict[str, dict[str, float]]) -> None:
+    ''' Prints a summary of the average metrics for each detector. '''
     print(f"\n{'Detector':<25} {'Precision':>10} {'Recall':>10} {'F1':>10}")
     print("-" * 58)
     for name, m in sorted(avg.items(), key=lambda x: x[1]["f1"], reverse=True):
@@ -236,6 +252,7 @@ def print_summary(avg: dict[str, dict[str, float]]) -> None:
 
 
 def main() -> None:
+    # Collect metrics for all detectors across the dataset
     parser = argparse.ArgumentParser(description="Batch evaluate and visualize edge detectors")
     parser.add_argument("--limit", type=int, default=None, help="Process only the first N images")
     parser.add_argument("--tolerance", type=int, default=2, help="Pixel match radius for evaluation")
@@ -252,6 +269,7 @@ def main() -> None:
     avg = average_metrics(all_metrics)
     print_summary(avg)
 
+    # Save charts
     print("\nSaving charts...")
     plot_avg_bars(avg, OUTPUT_DIR / "avg_scores.png")
     plot_f1_boxplot(all_metrics, OUTPUT_DIR / "f1_boxplot.png")

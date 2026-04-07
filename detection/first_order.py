@@ -3,18 +3,21 @@ import cv2
 
 
 class FirstOrder:
+    ''' Implements first-order edge detection methods: Robert's Cross, Sobel, and Scharr operators. '''
     def __init__(self, image_path=None, threshold=0):
         self.image_path = image_path
         self.image_matrix = self._load_image()
         self.threshold = threshold
 
     def _load_image(self) -> np.ndarray:
+        ''' Loads and preprocesses the image. '''
         img = cv2.imread(self.image_path, cv2.IMREAD_GRAYSCALE)
         if img is None:
             raise FileNotFoundError(f"Could not load image at path: {self.image_path}")
         return cv2.GaussianBlur(img, (3 , 3), 0)
     
     def _apply_threshold(self, gradient_magnitude) -> np.ndarray:
+        ''' Applies a threshold to the gradient magnitude image. '''
         if self.threshold is None:
             return cv2.normalize(gradient_magnitude, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
         
@@ -22,6 +25,7 @@ class FirstOrder:
         return binary_img.astype(np.uint8)
 
     def robert_cross_operator(self):
+        ''' Applies Robert's Cross operator to detect edges. '''
         kernel_x = np.array([[1, 0], [0, -1]])
         kernel_y = np.array([[0, 1], [-1, 0]])
 
@@ -35,6 +39,7 @@ class FirstOrder:
         return self._apply_threshold(G_normalized)
 
     def sobel_operator(self) -> np.ndarray:
+        ''' Applies the Sobel operator to detect edges. '''
         kernel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
         kernel_y = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]])
 
@@ -48,6 +53,7 @@ class FirstOrder:
         return self._apply_threshold(G_normalized)
 
     def scharr_operator(self) -> np.ndarray:
+        ''' Applies the Scharr operator to detect edges. '''
         kernel_x = np.array([[-3, 0, 3], [-10, 0, 10], [-3, 0, 3]])
         kernel_y = np.array([[3, 10, 3], [0, 0, 0], [-3, -10, -3]])
 

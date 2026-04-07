@@ -2,15 +2,19 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 
+
 class SecondOrder:
+    ''' Implements the second-order edge detection algorithm'''
     def __init__(self, image_path, sigma=1.4):
         self.image_path = image_path
         self.sigma = sigma
 
+        # Preprocess the image
         self.img = cv2.imread(self.image_path, cv2.IMREAD_GRAYSCALE)
         if self.img is None: raise FileNotFoundError("Image not found")
 
     def laplacian_of_gaussian(self):
+        ''' Applies the Laplacian of Gaussian (LoG) filter to the image. '''
         k_size = int(6 * self.sigma + 1)
         if k_size % 2 == 0: k_size += 1
         blurred = cv2.GaussianBlur(self.img, (k_size, k_size), self.sigma)
@@ -22,9 +26,7 @@ class SecondOrder:
         return laplacian
 
     def find_zero_crossings(self, threshold=5):
-        """
-        Manually detects where the second derivative changes sign.
-        """
+        ''' Detects zero-crossings in the Laplacian image to find edges. '''
         laplacian = self.laplacian_of_gaussian()
         M, N = laplacian.shape
         output = np.zeros((M, N), dtype=np.uint8)
